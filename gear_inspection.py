@@ -5,7 +5,7 @@ import os
 
 os.makedirs("output", exist_ok=True)
 
-def inspect_image(image_path, defect_threshold=50.0):
+def inspect_image(image_path, defect_threshold=42.0):
     img = cv2.imread(image_path)
     if img is None:
         return
@@ -24,17 +24,27 @@ def inspect_image(image_path, defect_threshold=50.0):
     defects = cv2.convexityDefects(gear_contour, hull_indices)
 
     is_defective = False
+    max_dist_found = 0.0
+    defect_points = []
     
     if defects is not None:
         for i in range(defects.shape[0]):
             s, e, f, d = defects[i].reshape(-1)
             actual_distance = d / 256.0
             
+            if actual_distance > max_dist_found:
+                max_dist_found = actual_distance
+            
+            # Deteksi cacat jika kedalaman celah melebihi toleransi normal (> 42.0px)
             if actual_distance > defect_threshold:
                 is_defective = True
                 far_point = tuple(gear_contour[f][0])
-                x, y = far_point
-                cv2.rectangle(img, (x - 15, y - 15), (x + 15, y + 15), (0, 0, 255), 2)
+                defect_points.append(far_point)
+
+    # Anotasi kotak merah pada area cacat
+    for pt in defect_points:
+        x, y = pt
+        cv2.rectangle(img, (x - 20, y - 20), (x + 20, y + 20), (0, 0, 255), 2)
 
     status = "FAIL" if is_defective else "PASS"
     color = (0, 0, 255) if is_defective else (0, 255, 0)
@@ -42,8 +52,9 @@ def inspect_image(image_path, defect_threshold=50.0):
     
     filename = os.path.basename(image_path)
     cv2.imwrite(f"output/result_{filename}", img)
-    print(f"File: {filename} | Status: [{status}] -> Saved to output/")
+    print(f"File: {filename:<12} | Max Depth: {max_dist_found:4.1f}px | Status: [{status}]")
 
+print("--- AUTOMATED QUALITY INSPECTION ---")
 image_files = sorted(glob.glob("dataset/*.png"))
 for file_path in image_files:
     inspect_image(file_path)
